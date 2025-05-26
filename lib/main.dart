@@ -1,125 +1,321 @@
 import 'package:flutter/material.dart';
+import 'package:terminal_with_pty/terminal_manager.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const TerminalLauncherApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TerminalLauncherApp extends StatelessWidget {
+  const TerminalLauncherApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'macOS Terminal Launcher',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        primarySwatch: Colors.blue,
+        fontFamily: 'SF Pro Display',
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const TerminalLauncherHome(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class TerminalLauncherHome extends StatefulWidget {
+  const TerminalLauncherHome({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<TerminalLauncherHome> createState() => _TerminalLauncherHomeState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _TerminalLauncherHomeState extends State<TerminalLauncherHome> {
+  final TerminalManager _terminalManager = TerminalManager();
+  List<TerminalInstance> _terminals = [];
+  String _statusMessage = '준비됨';
+  bool _isLoading = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _updateTerminalList();
   }
 
   @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+  void dispose() {
+    _terminalManager.killAllTerminals();
+    super.dispose();
+  }
+
+  void _updateTerminalList() {
+    setState(() {
+      _terminals = _terminalManager.getActiveTerminals();
+    });
+  }
+
+  Future<void> _launchTerminal() async {
+    setState(() {
+      _isLoading = true;
+      _statusMessage = '터미널 실행 중...';
+    });
+
+    try {
+      final terminal = await _terminalManager.launchTerminal();
+      setState(() {
+        _statusMessage = '터미널이 성공적으로 실행되었습니다 (ID: ${terminal.id})';
+        _isLoading = false;
+      });
+      _updateTerminalList();
+
+      // 터미널 종료 감지
+      if (terminal.process != null) {
+        terminal.process!.exitCode.then((_) {
+          if (mounted) {
+            setState(() {
+              _statusMessage = '터미널 (ID: ${terminal.id})이 종료되었습니다';
+            });
+            _updateTerminalList();
+          }
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _statusMessage = '터미널 실행 실패: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _killTerminal(String terminalId) async {
+    try {
+      await _terminalManager.killTerminal(terminalId);
+      setState(() {
+        _statusMessage = '터미널 (ID: $terminalId)을 종료했습니다';
+      });
+      _updateTerminalList();
+    } catch (e) {
+      setState(() {
+        _statusMessage = '터미널 종료 실패: $e';
+      });
+    }
+  }
+
+  Future<void> _killAllTerminals() async {
+    try {
+      await _terminalManager.killAllTerminals();
+      setState(() {
+        _statusMessage = '모든 터미널을 종료했습니다';
+      });
+      _updateTerminalList();
+    } catch (e) {
+      setState(() {
+        _statusMessage = '터미널 종료 실패: $e';
+      });
+    }
+  }
+
+  Widget _buildTerminalCard(TerminalInstance terminal) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: ListTile(
+        leading: Icon(
+          Icons.terminal,
+          color: terminal.isRunning ? Colors.green : Colors.grey,
+        ),
+        title: Text('터미널 ${terminal.id}'),
+        subtitle: Text(
+          'PID: ${terminal.process?.pid ?? 'N/A'} | '
+          '실행 시간: ${terminal.startTime.hour}:${terminal.startTime.minute.toString().padLeft(2, '0')} | '
+          '상태: ${terminal.isRunning ? '실행중' : '종료됨'}',
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.info_outline, color: Colors.blue),
+              onPressed: () => _showTerminalInfo(terminal),
+              tooltip: '터미널 정보',
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.red),
+              onPressed:
+                  terminal.isRunning ? () => _killTerminal(terminal.id) : null,
+              tooltip: '터미널 종료',
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showTerminalInfo(TerminalInstance terminal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('터미널 ${terminal.id} 정보'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ID: ${terminal.id}'),
+            Text('PID: ${terminal.process?.pid ?? 'N/A'}'),
+            Text('실행 시간: ${terminal.startTime}'),
+            Text('런처 방식: ${terminal.launchMethod}'),
+            Text('상태: ${terminal.isRunning ? '실행 중' : '종료됨'}'),
+            Text('PTY 활성: ${terminal.pty != null ? 'Yes' : 'No'}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('닫기'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('macOS Terminal Launcher'),
+        backgroundColor: Colors.blueGrey[800],
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          // 상태 표시 영역
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: Colors.blueGrey[50],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _isLoading
+                          ? Icons.hourglass_empty
+                          : (_terminals.isNotEmpty
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked),
+                      color: _isLoading
+                          ? Colors.orange
+                          : (_terminals.isNotEmpty
+                              ? Colors.green
+                              : Colors.grey),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _statusMessage,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '활성 터미널: ${_terminals.where((t) => t.isRunning).length}개 / 총 ${_terminals.length}개',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blueGrey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 버튼 영역
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _launchTerminal,
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.launch),
+                    label: Text(_isLoading ? '실행 중...' : '새 터미널 열기'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _terminals.where((t) => t.isRunning).isEmpty
+                      ? null
+                      : _killAllTerminals,
+                  icon: const Icon(Icons.clear_all),
+                  label: const Text('모두 종료'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 터미널 목록
+          Expanded(
+            child: _terminals.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.terminal,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '실행 중인 터미널이 없습니다',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '"새 터미널 열기" 버튼을 눌러서 시작하세요',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _terminals.length,
+                    itemBuilder: (context, index) {
+                      return _buildTerminalCard(_terminals[index]);
+                    },
+                  ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
+        onPressed: _isLoading ? null : _launchTerminal,
+        tooltip: '새 터미널 열기',
+        backgroundColor: Colors.green,
         child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
     );
   }
 }
