@@ -57,6 +57,26 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _startTerminalWithDirectPty() async {
+    if (_isStarting) return;
+
+    setState(() {
+      _isStarting = true;
+    });
+
+    final success = await _terminalManager.startTerminalWithDirectPty();
+
+    setState(() {
+      _isStarting = false;
+    });
+
+    if (!success) {
+      _showSnackBar('직접 PTY 터미널 시작 실패', isError: true);
+    } else {
+      _showSnackBar('직접 PTY 터미널 시작 성공');
+    }
+  }
+
   Future<void> _killTerminal(int pid) async {
     final success = await _terminalManager.killTerminal(pid);
     _showSnackBar(
@@ -138,13 +158,33 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.play_arrow),
-                  label: Text(_isStarting ? '시작 중...' : '터미널 시작'),
+                  label: Text(_isStarting ? '시작 중...' : '터미널 시작 (script)'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _isStarting ? null : _startTerminalWithDirectPty,
+                  icon: _isStarting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.terminal),
+                  label: Text(_isStarting ? '시작 중...' : '직접 PTY'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
                 ElevatedButton.icon(
                   onPressed: _terminalManager.activeCount > 0
                       ? _killAllTerminals
