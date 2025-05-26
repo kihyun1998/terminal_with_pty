@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
-
-import 'screens/home_screen.dart';
+import 'package:terminal_with_pty/screens/hoem_screen.dart';
 
 void main() {
-  runApp(const TerminalLauncherApp());
+  runApp(const TerminalManagerApp());
 }
 
-class TerminalLauncherApp extends StatelessWidget {
-  const TerminalLauncherApp({super.key});
+class TerminalManagerApp extends StatelessWidget {
+  const TerminalManagerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Terminal Launcher',
+      title: 'Terminal Manager',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-        ),
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        fontFamily: 'SF Pro Text',
       ),
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
